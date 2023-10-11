@@ -117,15 +117,24 @@ function tag_and_push_images() {
         continue
       fi
 
+      docker load < $image_tar_path
 
       local tag=$sub_dir
+      # If tag contains '@', split and reformat it
+      if [[ $tag == *@* ]]; then
+        local semantic_tag=$(echo $tag | cut -d '@' -f 1)
+        local sha=$(echo $tag | cut -d '@' -f 2)
+        # Here, we reformat the tag by replacing '@' with '_'
+        # You might choose a different reformatting strategy
+        tag="${semantic_tag}_$(echo $sha | tr -d '[:punct:]')"
+      fi
+
       # Adjusted new_ref to include the chart name as a separate repository
       local new_ref="$new_registry_url/$chart_name/$original_repo:$tag"
       
       if $DRY_RUN; then
         echo "Would tag $original_repo:$tag and push as $new_ref"
         echo "Docker Load: $image_tar_path"
-        #echo "Would push $new_ref"
       else
         docker load < $image_tar_path
         docker tag $original_repo:$tag $new_ref || { echo "Failed to tag $original_repo:$tag to $new_ref"; exit 1; }
