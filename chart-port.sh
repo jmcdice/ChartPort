@@ -111,6 +111,14 @@ function tag_and_push_images() {
         continue
       fi
 
+      local image_tar_path=$(find "$root_dir/$dir/$sub_dir" -name "*.tar" -type f)
+      if [[ -z $image_tar_path ]]; then
+        echo "No image tar found in $root_dir/$dir/$sub_dir"
+        continue
+      fi
+
+      docker load < $image_tar_path
+
       local tag=$sub_dir
       # Adjusted new_ref to include the chart name as a separate repository
       local new_ref="$new_registry_url/$chart_name/$original_repo:$tag"
