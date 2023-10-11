@@ -117,7 +117,6 @@ function tag_and_push_images() {
         continue
       fi
 
-      docker load < $image_tar_path
 
       local tag=$sub_dir
       # Adjusted new_ref to include the chart name as a separate repository
@@ -125,8 +124,10 @@ function tag_and_push_images() {
       
       if $DRY_RUN; then
         echo "Would tag $original_repo:$tag and push as $new_ref"
+        echo "Docker Load: $image_tar_path"
         #echo "Would push $new_ref"
       else
+        docker load < $image_tar_path
         docker tag $original_repo:$tag $new_ref || { echo "Failed to tag $original_repo:$tag to $new_ref"; exit 1; }
         docker push $new_ref || { echo "Failed to push $new_ref"; exit 1; }
       fi
