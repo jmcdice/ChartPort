@@ -21,15 +21,21 @@ function add_helm_repo() {
   helm repo update &> /dev/null || { echo "Failed to update Helm repo"; exit 1; }
 }
 
-
 function download_helm_chart_manifest() {
   local repo="$1"
   local chart="$2"
   local version="$3"
   local additional_flags="$4"
   local output_file="$5"
+  local values_file="$6"  # New argument for the values file
 
-  eval "helm template $repo/$chart --version $version $additional_flags > $output_file" || exit_with_error "Failed to download Helm chart manifest"
+  # If a values file is provided, include it in the helm template command
+  local values_flag=""
+  if [[ -n $values_file ]]; then
+    values_flag="--values $values_file"
+  fi
+
+  eval "helm template $repo/$chart --version $version $values_flag $additional_flags > $output_file" || exit_with_error "Failed to download Helm chart manifest"
 }
 
 function download_helm_chart() {
@@ -74,16 +80,17 @@ function download() {
   local chart_repo_url=${1%/}
   local chart_name=$2
   local chart_version=$3
+  local values_file=$4  # New argument for the values file
 
-  # Check if $4 is set, otherwise default to an empty string
-  local additional_helm_flags=${4:-""}
+  # Check if $5 is set, otherwise default to an empty string
+  local additional_helm_flags=${5:-""}
 
-  if [[ $# -ge 4 ]]; then
-    shift 4
+  if [[ $# -ge 5 ]]; then
+    shift 5
   else
     shift $#
   fi
- 
+
   # Append remaining arguments to the additional_helm_flags
   additional_helm_flags+=" $@"
 
@@ -96,7 +103,7 @@ function download() {
   mkdir -p $helm_charts_dir  # Create a directory for the Helm chart
 
   add_helm_repo $repo_name $chart_repo_url
-  download_helm_chart_manifest $repo_name $actual_chart_name $chart_version "$additional_helm_flags" $manifest_file
+  download_helm_chart_manifest $repo_name $actual_chart_name $chart_version "$additional_helm_flags" $manifest_file $values_file 
   download_helm_chart $repo_name/$actual_chart_name $chart_version $helm_charts_dir
   download_images $manifest_file $root_dir $actual_chart_name
 
