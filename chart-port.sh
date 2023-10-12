@@ -51,16 +51,19 @@ function download_images() {
 
     mkdir -p "$root_dir/$chart_name/$repo_name/$tag"  # Adjusted to include the chart name
 
-    local image_file="$root_dir/$chart_name/$repo_name/$tag/$repo_name-$tag.tar"
+    local sanitized_image=$(echo $image | sed 's/@[^ ]*//g')
+    local sanitized_name=$(echo $repo_name-$tag | sed 's/@[^ ]*//g')
+    local image_file="$root_dir/$chart_name/$repo_name/$tag/$sanitized_name.tar"
+
     if [[ -e $image_file ]]; then
       echo "Image file $image_file already exists, skipping..."
     else 
-      docker pull $image || { echo "Failed to pull image $image"; exit 1; }
-      docker save "$image" -o $image_file || { echo "Failed to save image $image"; exit 1; }
+      docker pull $sanitized_image || { echo "Failed to pull image $sanitized_image"; exit 1; }
+      docker save $sanitized_image -o $image_file || { echo "Failed to save image $sanitized_image"; exit 1; }
     fi
 
     # Append the image name to the images.txt file
-    echo "$full_name:$tag" >> $images_file
+    echo "$full_name:$tag" | sed 's/@[^ ]*//g' >> $images_file
   done
 }
 
@@ -117,15 +120,13 @@ function tag_and_push_images() {
         continue
       fi
 
-      docker load < $image_tar_path
 
       local tag=$sub_dir
       # If tag contains '@', split and reformat it
       if [[ $tag == *@* ]]; then
         local semantic_tag=$(echo $tag | cut -d '@' -f 1)
         local sha=$(echo $tag | cut -d '@' -f 2)
-        # Here, we reformat the tag by replacing '@' with '_'
-        # You might choose a different reformatting strategy
+
         tag="${semantic_tag}_$(echo $sha | tr -d '[:punct:]')"
       fi
 
@@ -136,7 +137,7 @@ function tag_and_push_images() {
         echo "Would tag $original_repo:$tag and push as $new_ref"
         echo "Docker Load: $image_tar_path"
       else
-        docker load < $image_tar_path
+        docker load < $image_tar_path || { echo "Failed to docker load image: $image_tar_path"; exit 1; }
         docker tag $original_repo:$tag $new_ref || { echo "Failed to tag $original_repo:$tag to $new_ref"; exit 1; }
         docker push $new_ref || { echo "Failed to push $new_ref"; exit 1; }
       fi
