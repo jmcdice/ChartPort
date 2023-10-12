@@ -58,11 +58,12 @@ function download_images() {
     IFS=':' read -r full_name tag <<< "$image"
     local repo_name=$(echo $full_name | tr '/' '_')
 
-    mkdir -p "$root_dir/$chart_name/$repo_name/$tag"
+    local sanitized_tag=$(echo $tag | sed 's/@[^ ]*//g')
+
+    mkdir -p "$root_dir/$chart_name/$repo_name/$sanitized_tag"
 
     local sanitized_image=$(echo $image | sed 's/@[^ ]*//g')
-    local sanitized_name=$(echo $repo_name-$tag | sed 's/@[^ ]*//g')
-    local image_file="$root_dir/$chart_name/$repo_name/$tag/$sanitized_name.tar"
+    local image_file="$root_dir/$chart_name/$repo_name/$sanitized_tag/$repo_name-$sanitized_tag.tar"
 
     if [[ -e $image_file ]]; then
       echo "Image file $image_file already exists, skipping..."
@@ -122,10 +123,10 @@ function download() {
   mv "$helm_charts_dir/$actual_chart_name" "$combined_dir/helm-chart"
 
   # Create a tarball of the combined directory
-  echo "Creating cache-root/${actual_chart_name}_${chart_version}.tar.gz"
-  tar -czf "cache-root/${actual_chart_name}_${chart_version}.tar.gz" -C "cache-root/combined" "$actual_chart_name"
+  echo "Creating cache-root/${actual_chart_name}_${chart_version}.tar"
+  tar -cf "cache-root/${actual_chart_name}_${chart_version}.tar" -C "cache-root/combined" "$actual_chart_name"
   rm -rf $combined_dir
-  echo "Chart and images saved: cache-root/${actual_chart_name}_${chart_version}.tar.gz"
+  echo "Chart and images saved: cache-root/${actual_chart_name}_${chart_version}.tar"
 }
 
 function tag_and_push_images() {
@@ -228,7 +229,7 @@ function upload() {
   local new_registry_url=$2
 
   # Extract the chart name and version from the tarball path
-  local tarball_name=$(basename "$tarball_path" .tar.gz)
+  local tarball_name=$(basename "$tarball_path" .tar)
   local timestamp=$(date +%Y%m%d%H%M%S)
   local extract_dir="extracted/$tarball_name-$timestamp"
 
