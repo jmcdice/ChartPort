@@ -29,9 +29,6 @@ function download_helm_chart_manifest() {
   local additional_flags="$4"
   local output_file="$5"
 
-  # Debugging line to print the command
-  #echo "helm template $repo/$chart --version $version $additional_flags > $output_file"  
-  # Evaluating the command
   eval "helm template $repo/$chart --version $version $additional_flags > $output_file" || exit_with_error "Failed to download Helm chart manifest"
 }
 
@@ -42,21 +39,20 @@ function download_helm_chart() {
 function download_images() {
   local manifest_file=$1
   local root_dir=$2
-  local chart_name=$3  # New argument for the chart name
+  local chart_name=$3
 
-  mkdir -p "$root_dir/$chart_name"  # Adjusted to include the chart name
+  mkdir -p "$root_dir/$chart_name"
 
   local image_list=$(awk -F'image: ' '/image: /{gsub("\"","",$2); print $2}' $manifest_file | sort -u) || { echo "Failed to extract image names"; exit 1; }
 
-  # Adjusted to include the chart name in the path
   local images_file="$root_dir/$chart_name/images.txt"
   echo "Images:" > $images_file
 
   for image in $image_list; do
     IFS=':' read -r full_name tag <<< "$image"
-    local repo_name=$(echo $full_name | tr '/' '_')  # Changed variable name for clarity
+    local repo_name=$(echo $full_name | tr '/' '_')
 
-    mkdir -p "$root_dir/$chart_name/$repo_name/$tag"  # Adjusted to include the chart name
+    mkdir -p "$root_dir/$chart_name/$repo_name/$tag"
 
     local sanitized_image=$(echo $image | sed 's/@[^ ]*//g')
     local sanitized_name=$(echo $repo_name-$tag | sed 's/@[^ ]*//g')
@@ -83,9 +79,9 @@ function download() {
   local additional_helm_flags=${4:-""}
 
   if [[ $# -ge 4 ]]; then
-    shift 4  # Adjusting the shift to account for the new argument
+    shift 4
   else
-    shift $#  # Shift all arguments if less than 4
+    shift $#
   fi
  
   # Append remaining arguments to the additional_helm_flags
@@ -93,13 +89,11 @@ function download() {
 
   local repo_name=$(echo ${chart_repo_url##*/} | tr -d '/')
   local actual_chart_name=${chart_name##*/}
-
   local root_dir="cache-root/images"
   local helm_charts_dir="cache-root/helm-charts"
   local manifest_file="$helm_charts_dir/${actual_chart_name}-manifests.yaml"
 
   mkdir -p $helm_charts_dir  # Create a directory for the Helm chart
-
 
   add_helm_repo $repo_name $chart_repo_url
   download_helm_chart_manifest $repo_name $actual_chart_name $chart_version "$additional_helm_flags" $manifest_file
@@ -112,11 +106,6 @@ function download() {
   echo "Chart Name: $chart_name" >> $metadata_file
   echo "Chart Version: $chart_version" >> $metadata_file
   echo "Download Date: $(date)" >> $metadata_file
-
-  # rm $manifest_file
-
-  #echo "Images saved in $root_dir"
-  #echo "Helm chart saved in $helm_charts_dir"
 
   local combined_dir="cache-root/combined/$actual_chart_name"
   mkdir -p $combined_dir
@@ -226,12 +215,25 @@ function update_all_image_references() {
   done
 }
 
+
 function upload() {
-  local chart_name=$1
+  local tarball_path=$1
   local new_registry_url=$2
 
-  tag_and_push_images $chart_name $new_registry_url
-  update_all_image_references $chart_name $new_registry_url
+  # Extract the chart name and version from the tarball path
+  local tarball_name=$(basename "$tarball_path" .tar.gz)
+  local timestamp=$(date +%Y%m%d%H%M%S)
+  local extract_dir="extracted/$tarball_name-$timestamp"
+
+  mkdir -p $extract_dir
+  tar -xzf $tarball_path -C $extract_dir || { echo "Failed to extract tarball"; exit 1; }
+
+  # Assuming the chart name is the first directory within the tarball
+  local chart_name=$(ls $extract_dir | head -n 1)
+  
+  # Update function calls to use the extracted directory paths
+  tag_and_push_images $chart_name $new_registry_url "$extract_dir/$chart_name/images"
+  update_all_image_references $chart_name $new_registry_url "$extract_dir/$chart_name/helm-chart"
 }
 
 function list_charts() {
@@ -262,7 +264,7 @@ function usage() {
   echo "Usage: $0 [ --dry-run ] <command> [arguments]"
   echo "Commands:"
   echo "  download <chart_repo_url> <chart_name> <chart_version> [additional_helm_flags]"
-  echo "  upload <chart> <new_registry_url>"
+  echo "  upload <tarball_path> <new_registry_url>"
   echo "  list (list local charts)"
   echo ""
 }
