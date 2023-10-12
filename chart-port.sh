@@ -132,7 +132,7 @@ function download() {
 function tag_and_push_images() {
   local chart_name=$1
   local new_registry_url=$2
-  local root_dir="cache-root/images/$chart_name"
+  local root_dir=$3
 
   for dir in $(ls $root_dir); do
     local original_repo=$(echo $dir | tr '_' '/')
@@ -204,9 +204,9 @@ function update_all_image_references() {
 
   local chart_name=$1
   local new_registry_url=$2
-  local helm_chart_dir="cache-root/helm-charts/$chart_name"
+  local helm_chart_dir="$3/helm-chart"
 
-  local root_dir="cache-root/images/$chart_name"
+  local root_dir="$3/images"
 
   for dir in $(ls $root_dir); do
     if [[ $dir == "images.txt" ]]; then
@@ -231,17 +231,17 @@ function upload() {
   # Extract the chart name and version from the tarball path
   local tarball_name=$(basename "$tarball_path" .tar)
   local timestamp=$(date +%Y%m%d%H%M%S)
-  local extract_dir="extracted/$tarball_name-$timestamp"
+  local extract_dir="extracted/"
 
   mkdir -p $extract_dir
-  tar -xzf $tarball_path -C $extract_dir || { echo "Failed to extract tarball"; exit 1; }
+  tar -xf $tarball_path -C $extract_dir || { echo "Failed to extract tarball"; exit 1; }
 
   # Assuming the chart name is the first directory within the tarball
   local chart_name=$(ls $extract_dir | head -n 1)
   
   # Update function calls to use the extracted directory paths
   tag_and_push_images $chart_name $new_registry_url "$extract_dir/$chart_name/images"
-  update_all_image_references $chart_name $new_registry_url "$extract_dir/$chart_name/helm-chart"
+  update_all_image_references $chart_name $new_registry_url "$extract_dir/$chart_name"
 }
 
 function list_charts() {
