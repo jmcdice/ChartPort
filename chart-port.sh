@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -eEuo pipefail  # Enable strict error handling
+#set -x
 
 DRY_RUN=false
 
@@ -17,15 +18,21 @@ function dry_run_notify() {
 
 function add_helm_repo() {
   helm repo add $1 $2 || { echo "Failed to add Helm repo"; exit 1; }
-  helm repo update || { echo "Failed to update Helm repo"; exit 1; }
+  helm repo update &> /dev/null || { echo "Failed to update Helm repo"; exit 1; }
 }
 
+
 function download_helm_chart_manifest() {
-  local values_file_option=""
-  if [[ -n $6 ]]; then
-    values_file_option="-f $6"
-  fi
-  eval "helm template $1/$2 --version $3 $4 $values_file_option > $5" || exit_with_error "Failed to download Helm chart manifest"
+  local repo="$1"
+  local chart="$2"
+  local version="$3"
+  local additional_flags="$4"
+  local output_file="$5"
+
+  # Debugging line to print the command
+  #echo "helm template $repo/$chart --version $version $additional_flags > $output_file"  
+  # Evaluating the command
+  eval "helm template $repo/$chart --version $version $additional_flags > $output_file" || exit_with_error "Failed to download Helm chart manifest"
 }
 
 function download_helm_chart() {
@@ -71,9 +78,19 @@ function download() {
   local chart_repo_url=${1%/}
   local chart_name=$2
   local chart_version=$3
-  local values_file=$4  # Adding a new argument for the optional values file
-  shift 4  # Adjusting the shift to account for the new argument
-  local additional_helm_flags="$@"
+
+  # Check if $4 is set, otherwise default to an empty string
+  local additional_helm_flags=${4:-""}
+
+  if [[ $# -ge 4 ]]; then
+    shift 4  # Adjusting the shift to account for the new argument
+  else
+    shift $#  # Shift all arguments if less than 4
+  fi
+ 
+  # Append remaining arguments to the additional_helm_flags
+  additional_helm_flags+=" $@"
+
   local repo_name=$(echo ${chart_repo_url##*/} | tr -d '/')
   local actual_chart_name=${chart_name##*/}
 
@@ -83,8 +100,9 @@ function download() {
 
   mkdir -p $helm_charts_dir  # Create a directory for the Helm chart
 
+
   add_helm_repo $repo_name $chart_repo_url
-  download_helm_chart_manifest $repo_name $actual_chart_name $chart_version "$additional_helm_flags" $manifest_file $values_file
+  download_helm_chart_manifest $repo_name $actual_chart_name $chart_version "$additional_helm_flags" $manifest_file
   download_helm_chart $repo_name/$actual_chart_name $chart_version $helm_charts_dir
   download_images $manifest_file $root_dir $actual_chart_name
 
@@ -95,10 +113,23 @@ function download() {
   echo "Chart Version: $chart_version" >> $metadata_file
   echo "Download Date: $(date)" >> $metadata_file
 
-  #rm $manifest_file
+  # rm $manifest_file
 
-  echo "Images saved in $root_dir"
-  echo "Helm chart saved in $helm_charts_dir"
+  #echo "Images saved in $root_dir"
+  #echo "Helm chart saved in $helm_charts_dir"
+
+  local combined_dir="cache-root/combined/$actual_chart_name"
+  mkdir -p $combined_dir
+  
+  # Move images and helm chart to the combined directory
+  mv "$root_dir/$actual_chart_name" "$combined_dir/images"
+  mv "$helm_charts_dir/$actual_chart_name" "$combined_dir/helm-chart"
+
+  # Create a tarball of the combined directory
+  echo "Creating cache-root/${actual_chart_name}_${chart_version}.tar.gz"
+  tar -czf "cache-root/${actual_chart_name}_${chart_version}.tar.gz" -C "cache-root/combined" "$actual_chart_name"
+  rm -rf $combined_dir
+  echo "Chart and images saved: cache-root/${actual_chart_name}_${chart_version}.tar.gz"
 }
 
 function tag_and_push_images() {
